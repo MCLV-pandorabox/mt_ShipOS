@@ -1,41 +1,12 @@
--- MCLV:20220519: script copied from one of FeXoR's working ships with permission
+-- Bookmark JumpDrive
+-- copy from Simplified FeXoR JD code
+-- working title
+-- tags:
+--   mxnote comment by MCLV
+--   mxedit bookmark by MCLV
+-- Status: testing bookmarks limits . jumpdrive page seems to fail sometimes, find out why . current bookmark limit = 24 . fails to save after that
 -- Basic Pandorabox tools
 
--- ########
--- TODO:
---Current coordinates in LUAc doesn't reset when a jump was requested but not executed (e.g. obstructed, Refresh+Reset fixes the state)
---Changing the radius does not adjust instant_jump distance
---Changing instant_jump distance too small is actually set to the smallest possible but late for the GUI to always show that
---  Unify usage of linebuffer
---Hardcoded textarea name "display" (cut in logging to prevent logging itself inflating string size) prevents more than one such textarea per page
--- ########
-
--- ########
--- LUA environment
--- ########
-local function get_LUA_environment_information()
-    local global_modules = ""
-    local modules = {}
-    for k, v in pairs(_G) do
-        global_modules = global_modules .. tostring(k) .. "(" .. type(v) .. ") "
-        if type(v) == "table" then
-            modules[k] = ""
-            for m, c in pairs(v) do
-                modules[k] = modules[k] .. tostring(m) .. "(" .. type(c) .. ") "
-            end
-        end
-    end
-    local output = "Available in _G:\n" .. global_modules
-    for k, v in pairs(modules) do
-        if k ~= "_G" then
-            output = output .. "\n Available in " .. tostring(k) .. ":\n" .. tostring(v)
-        end
-    end
-    return output
-end
-if event.type == "program" then
-    mem.environment_information = get_LUA_environment_information()
-end
 -- NOTE Hardcoded module names. I have no clue why this would make anything better.
 local math, os, string, table = math, os, string, table
 
@@ -45,7 +16,7 @@ local math, os, string, table = math, os, string, table
 
 local help = false
 
-local permission = {authorised_users = {"FeXoR", "6r1d", "SX", "SwissalpS", "Huhhila", "BuckarooBanzai", "admin"}}
+local permission = {authorised_users = {"MCLV", "1155"}}
 if mem.permission == nil then
     mem.permission = {ignore = false}
 end
@@ -68,7 +39,7 @@ if mem.events == nil then
     mem.events = {count = 0}
 end
 
-local jumpdrive = {channel = "jumpdrive"}
+local jumpdrive = {channel = "jumpdrive",instajump = false}
 if mem.linebuffer == nil then
     mem.linebuffer = {}
     if mem.linebuffer.jumpdrive == nil then
@@ -78,7 +49,8 @@ end
 
 local touchscreen = {
     channel = "ts",
-    pages = {"Events", "Jumpdrive", "LUA Libs"},
+    uiDebug = false,
+    pages = {"Events", "Jumpdrive","Bookmarks"},
     permissions = {"Open", "Users", "Locked"},
     linebuffer = {jumpdrive = {memory = mem.linebuffer.jumpdrive, max_lines = 50}}
 }
@@ -89,8 +61,6 @@ if mem.ts_lock == nil then
     mem.ts_lock = 2
 end
 
-local breakers = {port = "b"}
-
 if mem.instant_jump == nil then
     mem.instant_jump = {distance = 50}
 end
@@ -98,7 +68,75 @@ end
 -- ########
 -- Helper functions
 -- ########
+function bookmarkXport()
+    s={};
+    for k,v in pairs(mem.l) do
+        --table.insert(s, k .. "," .. v[1] .. "," .. v[2] .. "," .. v[3])
+        table.insert(s, tostring(k) .. "," .. tostring(v))
+    end
+    table.sort(s)
+    return s
+end
+function importBookmarks(CSVBM) -- mxnote CSVBM= CSV bookmark text . format: name,x,y,z \n . name can not have special chars or spaces because it is used as a key in a hash table
+   local T=csvtotable(CSVBM)
+   local bm={}
+   for i,v in ipairs(T) do
+       if type(v) == "table" then
+           bm[v[1]] = "" .. v[2] .. "," .. v[3] .. "," .. v[4] 
+           --bm[i] = type(v) .. ": " .. v[1]
+       end
+   end
+   return bm
+end
 
+function csvtotable(sInput) -- mxnote very simple csv reader. no escape characters, no quotes, if you want a comma in your field text: tuff luk
+    local fieldsep = string.byte(",")
+    local linesep = string.byte("\n")
+    local field = {}
+    local line = {"two"}
+    local acc = "" -- string accumulator
+    local nByte=0;
+    for nChar = 1, #sInput do
+        nByte = sInput:byte(nChar)
+        if nByte == fieldsep then
+            table.insert(field, acc)
+            acc = ""
+        elseif nByte == linesep then
+            table.insert(field, acc)
+            table.insert(line, field)
+            field = {}
+            acc = ""
+        elseif nChar == #sInput then
+            acc = acc .. string.char(nByte)
+            table.insert(field,acc)
+            table.insert(line,field)
+            --we finished, but code may continue. no probl, xcept for eficiency
+        else
+            acc = acc .. string.char(nByte)
+        end
+    end
+    return line
+end
+
+function array_keys(tbl)
+    ks = {}
+    local n = 0
+    -- local tbl=table.sort(tbl)
+    for i, v in pairs(tbl) do
+        n = n + 1
+        table.insert(ks, i)
+        --ks[n]=tostring(i)
+    end
+    return ks
+end
+function indexOf(array, value) --mxnote find index of the value in array(table) : Handy for dropdown boxes
+    for i, v in ipairs(array) do
+        if v == value then
+            return i
+        end
+    end
+    return nil
+end
 local character = {}
 character.is_numeric = function(sChar)
     if sChar:byte() >= 48 and sChar:byte() <= 57 then
@@ -208,10 +246,14 @@ end
 
 local function send_to_monitors(message)
     -- Omitt appending it's own and other "display" type content to avoid doubling the output
+    if message ~= nil and message.msg ~= nil  and message.channel == "ts" and touchscreen.uiDebug == false then
+        -- touchscreen_add_line('ts line detected. uiDebug = False')
+        return -- mxnote don't log touch screen unless uiDebug flag is true
+    end
+    
     if message ~= nil and message.msg ~= nil and message.msg.display ~= nil then
         message.msg.display = "<cut>"
     end
-
     if message.channel then
         digiline_send(event_catcher.monitor.channel, message.channel)
     elseif message.type then
@@ -222,7 +264,7 @@ local function send_to_monitors(message)
     if message ~= nil and message.type == "interrupt" then
         message.time = get_time_string()
     end
-    touchscreen_add_line(get_string(message))
+    touchscreen_add_line(get_string(message,6))
     digiline_send(
         event_catcher.touchscreen.channel,
         {
@@ -294,6 +336,38 @@ local function update_page(page)
                     H = 9.3
                 }
             )
+        elseif page == "Bookmarks" then
+            --mxedit
+            local bookmarkstxt=bookmarkXport()
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "textarea",
+                    name = "bookmarktxt",
+                    label = "Bookmark export:",
+                    default = table.concat(bookmarkstxt, "\n"),
+                    X = 1.6,
+                    Y = 1.5,
+                    W = 11.5,
+                    H = 8.75
+                }
+            )
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "button",
+                    name = "save",
+                    label = "Save",
+                    X = 1.6,
+                    Y = 0,
+                    W = 1,
+                    H = 0.8
+                }
+            )
+
+
         elseif page == "Jumpdrive" then
             table.insert(
                 message,
@@ -367,7 +441,7 @@ local function update_page(page)
                     selected_id = tonumber(mem.jumpdrive.radius),
                     X = 12.4,
                     Y = 3.85,
-                    W = 0.5,
+                    W = 1,
                     H = 6
                 }
             )
@@ -413,11 +487,16 @@ local function update_page(page)
                 }
             )
             --
+            local incbutton="button_exit"
+            if jumpdrive.instajump == false then
+                incbutton="button"
+            end
+            
             table.insert(
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "xi",
                     label = (help and "@ E") or "E",
                     X = 3.8,
@@ -430,7 +509,7 @@ local function update_page(page)
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "xd",
                     label = (help and "@ W") or "W",
                     X = 3.8,
@@ -443,7 +522,7 @@ local function update_page(page)
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "yi",
                     label = (help and "@ ^") or "^",
                     X = 5.3,
@@ -456,7 +535,7 @@ local function update_page(page)
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "yd",
                     label = (help and "@ v") or "v",
                     X = 5.3,
@@ -469,7 +548,7 @@ local function update_page(page)
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "zi",
                     label = (help and "@ N") or "N",
                     X = 6.8,
@@ -482,7 +561,7 @@ local function update_page(page)
                 message,
                 {
                     command = "add",
-                    element = "button_exit",
+                    element = incbutton,
                     name = "zd",
                     label = (help and "@ S") or "S",
                     X = 6.8,
@@ -562,6 +641,49 @@ local function update_page(page)
                     H = 0.8
                 }
             )
+            
+            selected = mem.jumpdrive.instajump
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "checkbox",
+                    name = "instajump",
+                    label = "Instant Jump",
+                    X = 8.3,
+                    Y = 2.9,
+                    W = 1,
+                    H = 0.8,
+                    selected = selected
+                }
+            )
+            if mem.l == nil then
+                mem.l = {
+                    NotFound = "0,0,0"
+                }
+            end
+
+            options = array_keys(mem.l)
+            table.sort(options)
+            -- options = {"one","dos","tres"}
+            selected_index = indexOf(options, mem.destination)
+
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "dropdown",
+                    label = "Bookmarks",
+                    X = 8.3,
+                    Y = 1,
+                    W = 4.0,
+                    H = 0.5,
+                    name = "bookmark",
+                    choices = options,
+                    selected_id = selected_index,
+                    index_event = false
+                }
+            )
         else
             table.insert(
                 message,
@@ -624,7 +746,13 @@ if event.type == "digiline" and event.channel == touchscreen.channel and event.m
                 jumpdrive_page_needs_update = true
             end
         end
-
+--mxnote bookmarks
+        if event.msg.bookmark ~= nil and mem.destination~=event.msg.bookmark then
+            mem.destination = event.msg.bookmark 
+            mem.jumpdrive.target = coordinates:to_table(mem.l[event.msg.bookmark])
+            update_page("Jumpdrive")
+            --jumpdrive_page_needs_update = true
+        end
         if event.msg.radius ~= nil then
             if authorised then
                 mem.jumpdrive.radius = tonumber(string.sub(event.msg.radius, 5))
@@ -718,80 +846,122 @@ if event.type == "digiline" and event.channel == touchscreen.channel and event.m
         elseif event.msg.xi ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.x = mem.jumpdrive.position.x + mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.x = mem.jumpdrive.target.x + mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
+                
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
         elseif event.msg.xd ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.x = mem.jumpdrive.position.x - mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.x = mem.jumpdrive.target.x - mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
         elseif event.msg.yi ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.y = mem.jumpdrive.position.y + mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.y = mem.jumpdrive.target.y + mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
+                
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
         elseif event.msg.yd ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.y = mem.jumpdrive.position.y - mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.y = mem.jumpdrive.target.y - mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
         elseif event.msg.zi ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.z = mem.jumpdrive.position.z + mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.z = mem.jumpdrive.target.z + mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
+                
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
         elseif event.msg.zd ~= nil then
             if authorised then
                 --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.z = mem.jumpdrive.position.z - mem.instant_jump.distance
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
+                mem.jumpdrive.target.z = mem.jumpdrive.target.z - mem.instant_jump.distance
+                if mem.jumpdrive.instajump then
+                    digiline_send(
+                        jumpdrive.channel,
+                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
+                    )
+                    digiline_send(jumpdrive.channel, {command = "jump"})
+                else 
+                    jumpdrive_page_needs_update =true
+                end
+                
             else
                 send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
             end
+        elseif event.msg.instajump ~= nil then
+            if authorised then
+                mem.jumpdrive.instajump = event.msg.instajump == "true"
+                jumpdrive_page_needs_update =true
+            end
         end
-
         if jumpdrive_page_needs_update == true then
             update_page("Jumpdrive")
         end
+    elseif touchscreen.pages[mem.page] == "Bookmarks" then
+        --mxedit
+        if event.msg.bookmarktxt ~=nil and event.msg.save ~= nil then
+            send_to_monitors("BookmarksSave")
+            
+            mem.l = importBookmarks(event.msg.bookmarktxt)
+            
+            
+        end
+        
     end
 end
 
@@ -832,9 +1002,9 @@ if event.type == "digiline" and event.channel == jumpdrive.channel and event.msg
 
     if event.msg.success ~= nil then
         if event.msg.success == true then
-            output = output .. " Success!"
+            output = output .. " Success! (".. coordinates:to_string(mem.jumpdrive.target) ..")" 
         else
-            output = output .. " Failure! (Best refresh and reset)"
+            output = output .. " Failure! (".. coordinates:to_string(mem.jumpdrive.target) ..") (Best refresh and reset)"
         end
     end
     if event.msg.msg then
@@ -871,59 +1041,7 @@ end
 send_to_monitors(event)
 update_page("Events")
 
--- ########
--- Node Breakers
--- ########
---if event.type == "program" then port[breakers.port] = true else port[breakers.port] = false end
-
---########
---Count events
---########
 mem.events.count = mem.events.count + 1
 
--- ########
--- DEBUG BEGIN
--- ########
-if event.type == "program" then
--- send_to_monitors(tostring(permission.check("FeXoR")))
--- send_to_monitors("mem.jumpdrive = " .. get_string(mem.jumpdrive))
--- digiline_send("lv_battery_box", "get")
--- digiline_send("hv_battery_box", "get")
--- digiline_send("lv_switching_station", "get")
--- digiline_send("hv_switching_station", "get")
--- local test_string = "-4100,11713,1000"
--- send_to_monitors("test_string = " .. get_string(test_string) .. " (" .. type(test_string) .. ")")
--- local test_table = coordinates:to_table("-4100,11713,1000")
--- send_to_monitors("test_list = " .. get_string(test_list) .. " (" .. type(test_list) .. ")")
--- local test_table2 = {a = "Jabba", b = "Jurksel", c = "Harbsch"}
--- send_to_monitors("test_table = " .. get_string(test_table) .. " (" .. type(test_table) .. ")")
--- local test_merged = merge_shallow_tables(test_table, test_table2)
--- send_to_monitors("test_merged = " .. get_string(test_merged) .. " (" .. type(test_merged) .. ")")
-
--- tCoord = coordinates:to_table("some-Rubbish123---246-248-more-Junk")
--- for k, v in pairs(tCoord) do digiline_send("mon_ec", tostring(k)..":"..tostring(v)) end
--- if event.type == "on" then digiline_send("drawer", {name = "moretrees:rubber_tree_leaves", count = 7}) end
-end
--- DEBUG END
-
 -- MIT License
---
--- Copyright (c) 2021 Florian Finke
---
--- Permission is hereby granted, free of charge, to any person obtaining a copy
--- of this software and associated documentation files (the "Software"), to deal
--- in the Software without restriction, including without limitation the rights
--- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
--- copies of the Software, and to permit persons to whom the Software is
--- furnished to do so, subject to the following conditions:
---
--- The above copyright notice and this permission notice shall be included in all
--- copies or substantial portions of the Software.
---
--- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
--- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
--- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
--- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
--- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
--- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
--- SOFTWARE.
+-- bla
