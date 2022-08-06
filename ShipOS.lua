@@ -1,10 +1,13 @@
--- Bookmark JumpDrive
--- copy from Simplified FeXoR JD code
--- working title
+-- mt_ShipOS 
+-- https://github.com/MCLV-pandorabox/mt_ShipOS
+-- 
 -- tags:
 --   mxnote comment by MCLV
 --   mxedit bookmark by MCLV
--- Status: testing bookmarks limits . jumpdrive page seems to fail sometimes, find out why . current bookmark limit = 24 . fails to save after that
+-- Status: testing bookmarks . jumpdrive page seems to fail sometimes, find out why . current bookmark limit = 24 . fails to save after that. limit now 13, who knows why?
+-- issue: Jumpdrive page fails to load with bookmark dropdown in there. possible related cause, heavy quarry mining. possible solution, chunking digiline messages. happens, then magically resolves itself
+-- issue: this copy is a work around. moved dropdown to Bookmarks page so that it at least works
+-- added info page to get some info in the Events log
 -- Basic Pandorabox tools
 
 -- NOTE Hardcoded module names. I have no clue why this would make anything better.
@@ -49,8 +52,8 @@ end
 
 local touchscreen = {
     channel = "ts",
-    uiDebug = false,
-    pages = {"Events", "Jumpdrive","Bookmarks"},
+    uiDebug = true,
+    pages = {"Events", "Info","Jumpdrive","Bookmarks"},
     permissions = {"Open", "Users", "Locked"},
     linebuffer = {jumpdrive = {memory = mem.linebuffer.jumpdrive, max_lines = 50}}
 }
@@ -68,6 +71,13 @@ end
 -- ########
 -- Helper functions
 -- ########
+function chunkSend(channel, message) --mxnote sending digiline messages seperately or chunked might resolve the issue with timeouts...does not
+    chunkSize=3
+    for i=1,#message do
+        digiline_send(channel, message[i])
+    end
+end
+
 function bookmarkXport()
     s={};
     for k,v in pairs(mem.l) do
@@ -336,6 +346,34 @@ local function update_page(page)
                     H = 9.3
                 }
             )
+        elseif page == "Info" then
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "button",
+                    name = "getswitch",
+                    label = "Switch info",
+                    X = 8.3,
+                    Y = 0,
+                    W = 2,
+                    H = .5
+                }
+            )
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "button",
+                    name = "powerinfo",
+                    label = "Power Info",
+                    X = 6.3,
+                    Y = 0,
+                    W = 2,
+                    H = .5
+                }
+            )
+
         elseif page == "Bookmarks" then
             --mxedit
             local bookmarkstxt=bookmarkXport()
@@ -364,6 +402,29 @@ local function update_page(page)
                     Y = 0,
                     W = 1,
                     H = 0.8
+                }
+            )
+            
+
+            options = array_keys(mem.l)
+            table.sort(options)
+            -- options = {"one","dos","tres"}
+            selected_index = indexOf(options, mem.destination)
+
+            table.insert(
+                message,
+                {
+                    command = "add",
+                    element = "dropdown",
+                    label = "Bookmarks",
+                    X = 8.3,
+                    Y = 1,
+                    W = 4.0,
+                    H = 0.5,
+                    name = "bookmark",
+                    choices = options,
+                    selected_id = selected_index,
+                    index_event = false
                 }
             )
 
@@ -657,33 +718,6 @@ local function update_page(page)
                     selected = selected
                 }
             )
-            if mem.l == nil then
-                mem.l = {
-                    NotFound = "0,0,0"
-                }
-            end
-
-            options = array_keys(mem.l)
-            table.sort(options)
-            -- options = {"one","dos","tres"}
-            selected_index = indexOf(options, mem.destination)
-
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "dropdown",
-                    label = "Bookmarks",
-                    X = 8.3,
-                    Y = 1,
-                    W = 4.0,
-                    H = 0.5,
-                    name = "bookmark",
-                    choices = options,
-                    selected_id = selected_index,
-                    index_event = false
-                }
-            )
         else
             table.insert(
                 message,
@@ -697,6 +731,7 @@ local function update_page(page)
             )
         end
 
+        --chunkSend(touchscreen.channel, message)
         digiline_send(touchscreen.channel, message)
     end
 end
@@ -745,13 +780,6 @@ if event.type == "digiline" and event.channel == touchscreen.channel and event.m
             if tonumber(event.msg.jump_step_value) ~= mem.instant_jump.distance then
                 jumpdrive_page_needs_update = true
             end
-        end
---mxnote bookmarks
-        if event.msg.bookmark ~= nil and mem.destination~=event.msg.bookmark then
-            mem.destination = event.msg.bookmark 
-            mem.jumpdrive.target = coordinates:to_table(mem.l[event.msg.bookmark])
-            update_page("Jumpdrive")
-            --jumpdrive_page_needs_update = true
         end
         if event.msg.radius ~= nil then
             if authorised then
@@ -952,36 +980,77 @@ if event.type == "digiline" and event.channel == touchscreen.channel and event.m
         if jumpdrive_page_needs_update == true then
             update_page("Jumpdrive")
         end
+    elseif touchscreen.pages[mem.page] == "Info" then
+        if event.msg.getswitch ~= nil then
+            send_to_monitors("getswitch: " .. #mem.ship.switches)
+            
+            for k,v in ipairs(mem.ship.switches) do
+                send_to_monitors("k:v = " .. k .. ":" ..v)
+                digiline_send(v,"get")
+            end
+        end
+        if event.msg.powerinfo ~= nil then
+            send_to_monitors("Getpower command")
+            send_to_monitors("getpower: " .. #mem.ship.battery)
+            
+            for k,v in ipairs(mem.ship.battery) do
+                send_to_monitors("k:v = " .. k .. ":" ..v)
+                digiline_send(v,"get")
+            end
+        end
+        mem.page=indexOf(touchscreen.pages,"Events")
+        update_page("Events")
     elseif touchscreen.pages[mem.page] == "Bookmarks" then
+--mxnote bookmarks
+        if event.msg.bookmark ~= nil and mem.destination~=event.msg.bookmark then
+            mem.destination = event.msg.bookmark 
+            mem.jumpdrive.target = coordinates:to_table(mem.l[event.msg.bookmark])
+            update_page("Bookmarks")
+            --jumpdrive_page_needs_update = true
+        end
         --mxedit
         if event.msg.bookmarktxt ~=nil and event.msg.save ~= nil then
             send_to_monitors("BookmarksSave")
             
             mem.l = importBookmarks(event.msg.bookmarktxt)
-            
-            
         end
-        
     end
 end
 
 -- ########
 -- Jumpdrive
 -- ########
-if mem.jumpdrive == nil then
-    mem.jumpdrive = {
-        radius = 1,
-        power_req = 0,
-        distance = 0,
-        powerstorage = 0,
-        position = {x = 0, y = 0, z = 0},
-        target = {x = 0, y = 0, z = 0},
-        success = false,
-        msg = "",
-        time = 0
-    }
-end
 if event.type == "program" then
+--mxnote best place for bootstrapping is only in program state `aight?
+
+    if mem.l == nil then
+        mem.l = {
+            NotFound = "0,0,0"
+        }
+    end
+    if mem.destination == nil then
+        mem.destination="NotFound"
+    end
+    if mem.jumpdrive == nil then
+        mem.jumpdrive = {
+            radius = 1,
+            power_req = 0,
+            distance = 0,
+            powerstorage = 0,
+            position = {x = 0, y = 0, z = 0},
+            target = {x = 0, y = 0, z = 0},
+            success = false,
+            msg = "",
+            time = 0
+        }
+    end
+    if mem.ship == nil then
+        mem['ship'] = {
+            quarries = {},
+            switches = {"hvsw"},
+            battery = {"Bat1","Bat2"}
+        }
+    end
     digiline_send(jumpdrive.channel, {command = "get"})
 end
 
@@ -1045,3 +1114,6 @@ mem.events.count = mem.events.count + 1
 
 -- MIT License
 -- bla
+if event.type == "program" then
+
+end
