@@ -1,140 +1,49 @@
+--
 -- mt_ShipOS 
 -- https://github.com/MCLV-pandorabox/mt_ShipOS
--- 
+--
+-- by MCLV ( https://github.com/MCLV-pandorabox )
+-- License: no license, go ahead and do whatever. Code should be free.
+--   .  and I should have plenty of coffee. 
+--   Maybe we can work something out if you feel like it.
+--
+-- Installing:
+--   Make sure you have a touch screen, a jumpdrive and a luacontroller all connected properly with digiline.
+--   Set touch screen channel to "touch", jumpdrive to "jumpdrive" . or . change mem.ui.screen1.channel and mem.jd.channel in the code below
+--   Change mem.system.admin below to your player name.
+--   copy/paste the ShipOS.lua code you have just edited in the luacontroller and run
+--   That's it.
+--
 -- tags:
---   mxnote comment by MCLV
---   mxedit bookmark by MCLV
--- Status: testing bookmarks . jumpdrive page seems to fail sometimes, find out why . current bookmark limit = 24 . fails to save after that. limit now 13, who knows why?
--- issue: Jumpdrive page fails to load with bookmark dropdown in there. possible related cause, heavy quarry mining. possible solution, chunking digiline messages. happens, then magically resolves itself
--- issue: this copy is a work around. moved dropdown to Bookmarks page so that it at least works
--- added info page to get some info in the Events log
--- Basic Pandorabox tools
-
--- NOTE Hardcoded module names. I have no clue why this would make anything better.
-local math, os, string, table = math, os, string, table
-
--- ########
--- Settings
--- ########
-
-local help = false
-
-local permission = {authorised_users = {"MCLV", "1155"}}
-if mem.permission == nil then
-    mem.permission = {ignore = false}
+--  mxnote
+--    comment by MCLV
+--  mxedit 
+--    bookmark by MCLV
+--  F
+--    function group description
+--
+-- MCLV 20230117
+-- navigation and touch screen done
+-- test multi user
+-- MCLV 20230117
+-- add bookmark screen and testing(OK) done
+-- MCLV 20230118 add settings page and add user management
+-- 
+local msg = event.msg
+local dls = digiline_send
+local table_insert = table.insert
+-- F useful debug function
+function log(msg)
+    table_insert(mem.log, msg)
 end
-permission.check = function(user)
-    if mem.permission.ignore == true then
-        return true
-    end
-    local is_allowed = false
-    for i, u in ipairs(permission.authorised_users) do
-        if user == u then
-            is_allowed = true
-            break
-        end
-    end
-    return is_allowed
-end
-
-local event_catcher = {touchscreen = {channel = "ts_ec", max_lines = 30}, monitor = {channel = "mon_ec"}}
-if mem.events == nil then
-    mem.events = {count = 0}
-end
-
-local jumpdrive = {channel = "jumpdrive",instajump = false}
-if mem.linebuffer == nil then
-    mem.linebuffer = {}
-    if mem.linebuffer.jumpdrive == nil then
-        mem.linebuffer.jumpdrive = {"Here the Jumpdrive's responses will be shown."}
-    end
-end
-
-local touchscreen = {
-    channel = "ts",
-    uiDebug = true,
-    pages = {"Events", "Info","Jumpdrive","Bookmarks"},
-    permissions = {"Open", "Users", "Locked"},
-    linebuffer = {jumpdrive = {memory = mem.linebuffer.jumpdrive, max_lines = 50}}
-}
-if mem.page == nil then
-    mem.page = 1
-end
-if mem.ts_lock == nil then
-    mem.ts_lock = 2
-end
-
-if mem.instant_jump == nil then
-    mem.instant_jump = {distance = 50}
-end
-
--- ########
--- Helper functions
--- ########
-function chunkSend(channel, message) --mxnote sending digiline messages seperately or chunked might resolve the issue with timeouts...does not
-    chunkSize=3
-    for i=1,#message do
-        digiline_send(channel, message[i])
-    end
-end
-
-function bookmarkXport()
-    s={};
-    for k,v in pairs(mem.l) do
-        --table.insert(s, k .. "," .. v[1] .. "," .. v[2] .. "," .. v[3])
-        table.insert(s, tostring(k) .. "," .. tostring(v))
-    end
-    table.sort(s)
-    return s
-end
-function importBookmarks(CSVBM) -- mxnote CSVBM= CSV bookmark text . format: name,x,y,z \n . name can not have special chars or spaces because it is used as a key in a hash table
-   local T=csvtotable(CSVBM)
-   local bm={}
-   for i,v in ipairs(T) do
-       if type(v) == "table" then
-           bm[v[1]] = "" .. v[2] .. "," .. v[3] .. "," .. v[4] 
-           --bm[i] = type(v) .. ": " .. v[1]
-       end
-   end
-   return bm
-end
-
-function csvtotable(sInput) -- mxnote very simple csv reader. no escape characters, no quotes, if you want a comma in your field text: tuff luk
-    local fieldsep = string.byte(",")
-    local linesep = string.byte("\n")
-    local field = {}
-    local line = {"two"}
-    local acc = "" -- string accumulator
-    local nByte=0;
-    for nChar = 1, #sInput do
-        nByte = sInput:byte(nChar)
-        if nByte == fieldsep then
-            table.insert(field, acc)
-            acc = ""
-        elseif nByte == linesep then
-            table.insert(field, acc)
-            table.insert(line, field)
-            field = {}
-            acc = ""
-        elseif nChar == #sInput then
-            acc = acc .. string.char(nByte)
-            table.insert(field,acc)
-            table.insert(line,field)
-            --we finished, but code may continue. no probl, xcept for eficiency
-        else
-            acc = acc .. string.char(nByte)
-        end
-    end
-    return line
-end
-
-function array_keys(tbl)
+-- F data manipulation functions
+function table_keys(tbl) --mxnote list all the keys of a table (php naming convention) 
     ks = {}
     local n = 0
     -- local tbl=table.sort(tbl)
     for i, v in pairs(tbl) do
         n = n + 1
-        table.insert(ks, i)
+        table_insert(ks, i)
         --ks[n]=tostring(i)
     end
     return ks
@@ -147,58 +56,25 @@ function indexOf(array, value) --mxnote find index of the value in array(table) 
     end
     return nil
 end
-local character = {}
-character.is_numeric = function(sChar)
-    if sChar:byte() >= 48 and sChar:byte() <= 57 then
-        return true
-    else
-        return false
+function reverseTable(t) -- FAI: function written by OpenAI's chat https://chat.openai.com/
+    local reversedTable = {}
+    local itemCount = #t
+    for i, v in ipairs(t) do
+        reversedTable[itemCount + 1 - i] = v
     end
+    return reversedTable
 end
-
-local coordinates = {names = {"x", "y", "z"}}
-
-function coordinates:to_table(sInput)
-    local tNumberList = {}
-    if type(sInput) == "string" then
-        local bContinuous = false
-        for nChar = 1, #sInput do
-            local nByte = sInput:byte(nChar)
-            -- A new numerical string starts - potentially - ignoring repetitions of "-"
-            if
-                (bContinuous == false and (nByte == 45 or (nByte >= 48 and nByte <= 57))) or
-                    (nByte == 45 and sInput:byte(nChar - 1) ~= 45)
-             then
-                -- Override previous non valid numerical string "-"
-                if #tNumberList > 0 and tNumberList[#tNumberList] == "-" then
-                    tNumberList[#tNumberList] = string.char(nByte)
-                else
-                    table.insert(tNumberList, string.char(nByte))
-                end
-                bContinuous = true
-            elseif bContinuous and (nByte >= 48 and nByte <= 57) then
-                tNumberList[#tNumberList] = tostring(tNumberList[#tNumberList]) .. string.char(nByte)
-            elseif nByte ~= 45 then
-                bContinuous = false
-            end
-        end
-        -- Remove tailing non valid numerical string "-"
-        if tNumberList[#tNumberList] == "-" then
-            tNumberList[#tNumberList] = nil
-        end
+function merge(t1, t2)
+    local t3 = {}
+    for k, v in pairs(t1) do
+        t3[k] = v
     end
-    local tOutput = {}
-    for i, name in ipairs(self.names) do
-        tOutput[name] = tonumber(tNumberList[i] or "0")
+    for k, v in pairs(t2) do
+        t3[k] = v
     end
-    return tOutput
+    return t3
 end
-
-function coordinates:to_string(coordinate_table)
-    return coordinate_table.x .. "," .. coordinate_table.y .. "," .. coordinate_table.z
-end
-
-local function get_string(data, maxdepth)
+function get_string(data, maxdepth) -- *FeXoR's Jumpdrive "code:get_string"
     local maxdepth = maxdepth or 3
     if type(data) == "string" then
         return data
@@ -217,903 +93,939 @@ local function get_string(data, maxdepth)
     end
     return "Something went wrong!"
 end
-
-local function get_time_string(datetable)
-    local date_table = datetable or os.datetable()
-    local date_string = date_table.year .. "." .. date_table.month .. "." .. date_table.day
-    local time_string = date_table.hour .. ":" .. date_table.min .. ":" .. date_table.sec
-    return date_string .. " " .. time_string
+-- F coordinate functions
+function ctt(sInput) -- coordinates to table
+    local tNumberList = {}
+    if type(sInput) == "string" then
+        local bContinuous = false
+        for nChar = 1, #sInput do
+            local nByte = sInput:byte(nChar)
+            -- A new numerical string starts - potentially - ignoring repetitions of "-"
+            if
+                (bContinuous == false and (nByte == 45 or (nByte >= 48 and nByte <= 57))) or
+                    (nByte == 45 and sInput:byte(nChar - 1) ~= 45)
+             then
+                -- Override previous non valid numerical string "-"
+                if #tNumberList > 0 and tNumberList[#tNumberList] == "-" then
+                    tNumberList[#tNumberList] = string.char(nByte)
+                else
+                    table_insert(tNumberList, string.char(nByte))
+                end
+                bContinuous = true
+            elseif bContinuous and (nByte >= 48 and nByte <= 57) then
+                tNumberList[#tNumberList] = tostring(tNumberList[#tNumberList]) .. string.char(nByte)
+            elseif nByte ~= 45 then
+                bContinuous = false
+            end
+        end
+        -- Remove tailing non valid numerical string "-"
+        if tNumberList[#tNumberList] == "-" then
+            tNumberList[#tNumberList] = nil
+        end
+    end
+    local tOutput = {}
+    for i, name in ipairs({"x", "y", "z"}) do
+        tOutput[name] = tonumber(tNumberList[i] or "0")
+    end
+    return tOutput
 end
-
-local function merge_shallow_tables(t1, t2)
-    local t3 = {}
-    for k, v in pairs(t1) do
-        t3[k] = v
-    end
-    for k, v in pairs(t2) do
-        t3[k] = v
-    end
-    return t3
+function cts(coordinate_table) -- coordinates to string
+    return coordinate_table.x .. "," .. coordinate_table.y .. "," .. coordinate_table.z
 end
-
-local function add_line_to_buffer(linebuffer, message)
-    -- expects linebuffer to be an array with keys memory (link to line table in mem) and max_lines (integer)
-    if type(message) ~= "string" then
-        message = get_string(message)
+function coords_add(c1, c2)
+    if type(c1) == "string" then
+        c1 = ctt(c1)
     end
-    table.insert(linebuffer.memory, 1, message)
-    while table.maxn(linebuffer.memory) > linebuffer.max_lines do
-        table.remove(linebuffer.memory)
+    if type(c2) == "string" then
+        c2 = ctt(c2)
     end
+    local c3 = {}
+    for k, v in pairs(c1) do
+        c3[k] = v
+    end
+    for k, v in pairs(c2) do
+        c3[k] = c3[k] + c2[k]
+    end
+    return c3
 end
-
-local function touchscreen_add_line(msg)
-    table.insert(mem.event_catcher.touchscreen_line_table, 1, tostring(mem.events.count) .. ": " .. tostring(msg))
-    while table.maxn(mem.event_catcher.touchscreen_line_table) > event_catcher.touchscreen.max_lines do
-        table.remove(mem.event_catcher.touchscreen_line_table)
+function coords_sub(c1, c2)
+    if type(c1) == "string" then
+        c1 = ctt(c1)
     end
+    if type(c2) == "string" then
+        c2 = ctt(c2)
+    end
+    local c3 = {}
+    for k, v in pairs(c1) do
+        c3[k] = v
+    end
+    for k, v in pairs(c2) do
+        c3[k] = c3[k] - c2[k]
+    end
+    return c3
 end
-
-local function send_to_monitors(message)
-    -- Omitt appending it's own and other "display" type content to avoid doubling the output
-    if message ~= nil and message.msg ~= nil  and message.channel == "ts" and touchscreen.uiDebug == false then
-        -- touchscreen_add_line('ts line detected. uiDebug = False')
-        return -- mxnote don't log touch screen unless uiDebug flag is true
+function coords_neg(c1)
+    c2 = {}
+    if type(c1) == "string" then
+        c1 = ctt(c1)
     end
-    
-    if message ~= nil and message.msg ~= nil and message.msg.display ~= nil then
-        message.msg.display = "<cut>"
+    for k, v in pairs(c1) do
+        c2[k] = 0 - v
     end
-    if message.channel then
-        digiline_send(event_catcher.monitor.channel, message.channel)
-    elseif message.type then
-        digiline_send(event_catcher.monitor.channel, message.type)
+    return c2
+end
+function split(str, delimiter) -- FAI
+  local fields = {}
+  local field = ""
+  for i = 1, #str do
+    local char = string.sub(str, i, i)
+    if char == delimiter then
+      table_insert(fields, field)
+      field = ""
     else
-        digiline_send(event_catcher.monitor.channel, get_string(message, 1))
+      field = field .. char
     end
-    if message ~= nil and message.type == "interrupt" then
-        message.time = get_time_string()
+  end
+  table_insert(fields, field)
+  return fields
+end
+function join(tbl, delimiter)  -- FAI
+  local str = ""
+  for i, v in ipairs(tbl) do
+    str = str .. v
+    if i < #tbl then
+      str = str .. delimiter
     end
-    touchscreen_add_line(get_string(message,6))
-    digiline_send(
-        event_catcher.touchscreen.channel,
-        {
-            {command = "clear"},
-            {
-                command = "add",
-                element = "textarea",
-                name = "display",
-                label = "Events:",
-                default = table.concat(mem.event_catcher.touchscreen_line_table, "\n"),
-                X = 0.2,
-                Y = 0.1,
-                W = 10.2,
-                H = 9.5
-            }
-        }
-    )
+  end
+  return str
 end
 
--- ########
--- Touchscreen
--- ########
-local function update_page(page)
-    if touchscreen.pages[mem.page] == page then
-        local message = {
+-- F Jumpdrive Bookmark functions
+function bookmarkExport(bookmarks_table)
+    s={};
+    for k,v in pairs(bookmarks_table) do
+        --table_insert(s, k .. "," .. v[1] .. "," .. v[2] .. "," .. v[3])
+        table_insert(s, tostring(k) .. "," .. tostring(v))
+    end
+    table.sort(s)
+    return s
+end
+function bookmarkImport(CSVBM) -- mxnote CSVBM= CSV bookmark text . format: name,x,y,z \n . name can not have special chars or spaces because it is used as a key in a hash table
+    --mxnote: importing function takes a high tole on the luacontroller, and might time out! resulting in a no-save.
+    -- bookmarks can still be added using the 'add button' .  Will need to find a nicer solution for this soon
+   local T=csvtotable(CSVBM)
+   local bm={}
+   for i,v in ipairs(T) do
+       if type(v) == "table" then
+           bm[v[1]] = "" .. v[2] .. "," .. v[3] .. "," .. v[4] 
+           --bm[i] = type(v) .. ": " .. v[1]
+       end
+   end
+   return bm
+end
+
+function csvtotable(sInput) -- mxnote very simple csv reader. no escape characters, no quotes, if you want a comma in your field text: tuff luk
+    -- mxnote CSV is a common data exchange format FeXoR, not cryptic at all imo ;)
+    -- https://en.wikipedia.org/wiki/Comma-separated_values
+    local fieldsep = string.byte(",")
+    local linesep = string.byte("\n")
+    local field = {}
+    local lines = {"two"}
+    --local acc = "" -- string accumulator
+    --mxnote: I think acc is much easier to type then stringaccumulator, but allright, a replace is easily done to make it less 'cryptic'.
+    local stringaccumulator = "" 
+    local nByte=0;
+    for nChar = 1, #sInput do
+        nByte = sInput:byte(nChar)
+        if nByte == linesep then
+            table_insert(field, stringaccumulator)
+            table_insert(lines, field)
+            field = {}
+            stringaccumulator = ""
+        elseif nByte == fieldsep then
+            table_insert(field, stringaccumulator)
+            stringaccumulator = ""
+        elseif nChar == #sInput then
+            stringaccumulator = stringaccumulator .. string.char(nByte)
+            table_insert(field,stringaccumulator)
+            table_insert(lines,field)
+            --we finished, but code may continue. no probl, xcept for eficiency
+        else
+            stringaccumulator = stringaccumulator .. string.char(nByte)
+        end
+    end
+    return lines
+end
+-- F user managment functions
+function acl_role(key)
+    if indexOf(mem.system.admin, key) ~= nil then
+        return "admin"
+    elseif indexOf(mem.system.staff, key) ~= nil then
+        return "staff"
+    else
+        return "user"
+    end
+end
+-- F main stuff --
+function jdset(c) --jumpdrive set -- (table) c,  returns nil
+    dls(mem.jd.channel, merge({command = "set", formupdate = true}, c))
+end
+function init()
+    --mxnote:
+    -- The init function is to make sure that all the mem variables are defined and properly preset.
+    -- we don't do variable or object bootstrapping in this place, 
+    --   Everything is assumed to be defined because you add all initial variables and objects here.
+    --   We don't want to waste processor time checking if references exist or not
+    mem.log = {}
+    log("initialized")
+    --mxnote convention: add standard vars here in the mem.ui.vars.[varname] convention for easy searching through code
+    mem.ui = {}
+        mem.ui.screen1 = {}
+        mem.ui.screen1.channel = "touch"
+        mem.ui.screen1.active_page = 1
+        mem.ui.screen1.pages={"Navigation", "Bookmarks","Notepad","Settings"} 
+    mem.ui.vars = {} -- mxnote the (temporary)place for variables that need to be remembered between actions,pages. Stuff only gets realy used when the user presses a button(in most cases)
+        mem.ui.vars.radius = 1 -- hardcode radius
+        mem.ui.vars.step = 11
+        mem.ui.vars.comment = ""
+        mem.ui.vars.jdmessages = {}
+        mem.ui.destination=0 
+        mem.ui.vars.bookmarkstext="bookmark description,0,0,0"
+        mem.ui.vars.notepadtext="Notes for ship go here"
+    mem.system = {}
+        mem.system.user = ""
+        mem.system.admin = {"MCLV"} --help: change this to your username
+        mem.system.staff = {"friend1", "freind2"} --help: change these to the names of your friends that you'd also like to be able to access the system. Or you can just use the settings tab in the running system
+        mem.system.bookmarks = {}
+    mem.jdlog = {lst = "", buffer = {}}
+    mem.jd = {}
+        mem.jd.delay=0.3 
+        mem.jd.channel = "jumpdrive"
+        mem.jd.msg = ""
+        mem.jd.command = "" -- next command we'd like to send to the jd by interrupt -- sometimes we need to wait before we can send (digilines)
+        mem.jd.target = ""
+        mem.jd.position = ""
+end
+function UI_ShowScreen(msg)
+    -- ui images from unified inventory  ./unified_inventory/textures/ui_on_icon.png
+    local screen
+    local _swidth, _sheight = 10, 8 --screen width and height
+    local _bh = 0.8 -- _bh = button heightx``
+    local _bh2 = _bh/2 -- _bh = button heightx``
+    local _C12 = _swidth / 12 -- 12 column grid width
+    local _C6 = _swidth / 6 -- 6 column grid width
+    local _R12 = _sheight / 12
+    local role = acl_role(mem.system.user)
+
+    -- ui messages interpretation
+    if msg == nil then
+        msg = {tabheader = "1"}
+    end
+    if msg.clicker ~= nil then
+        mem.system.user = msg.clicker
+        if msg.login ~= nil then
+            msg.tabheader=1
+            mem.ui.screen1.active_page=1
+        end
+    end
+    -- security protected UI changes
+    if role == "staff" or role == "admin" then
+        if msg.tabheader ~= nil then
+            mem.ui.screen1.active_page = tonumber(msg.tabheader)
+        end
+        if msg.target and false then
+            mem.jd.target = msg.target
+        end
+        if msg.radius then 
+            mem.ui.vars.radius = tonumber(msg.radius)
+            mem.jd.radius = mem.ui.vars.radius
+            jdset({r = mem.jd.radius})
+        end
+        if msg.comment then
+            mem.ui.vars.comment = msg.comment
+        end
+        if msg.valuesset and msg.target then
+            mem.jd.target = msg.target
+            jdset(ctt(mem.jd.target))
+            dls(mem.jd.channel, {command = "get"})
+        end
+
+        if msg.jump then
+            if msg.comment and msg.comment ~= "" then
+                mem.ui.vars.comment = msg.comment
+                UI_jdlog("-- " .. msg.comment .. " --")
+            end
+            mem.jd.target = msg.target
+            jdset(ctt(mem.jd.target))
+            mem.jd.command = "jump"
+            interrupt(mem.jd.delay)
+        end
+        if msg.simulate then
+            if msg.comment and msg.comment ~= "" then
+                UI_jdlog("-- " .. msg.comment .. " --")
+            end
+            UI_jdlog("-simulation-")
+
+            mem.jd.target = msg.target
+            jdset(ctt(mem.jd.target))
+            mem.jd.command = "simulate"
+            interrupt(mem.jd.delay)
+        end
+        if msg.step then
+            mem.ui.vars.step = msg.step
+        end
+        if msg.frompos then
+            mem.jd.target = mem.jd.position
+        end
+        if msg.set then
+            msg.jd.target = msg.target
+        end
+
+        -- plus minus buttons --
+        if msg.xplus then
+            local v = ctt(mem.jd.target)
+            v.x = v.x + mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        if msg.xminus then
+            local v = ctt(mem.jd.target)
+            v.x = v.x - mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        if msg.yplus then
+            local v = ctt(mem.jd.target)
+            v.y = v.y + mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        if msg.yminus then
+            local v = ctt(mem.jd.target)
+            v.y = v.y - mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        if msg.zplus then
+            local v = ctt(mem.jd.target)
+            v.z = v.z + mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        if msg.zminus then
+            local v = ctt(mem.jd.target)
+            v.z = v.z - mem.ui.vars.step
+            mem.jd.target = cts(v)
+        end
+        -- /plus minus buttons --
+        if msg.notepadtext then
+            mem.ui.vars.notepadtext=msg.notepadtext
+        end
+        if msg.clearjdlog then
+            mem.ui.vars.jdmessages = {}
+        end
+        if msg.bookmarkstext ~= nil then
+            mem.ui.vars.bookmarkstext=msg.bookmarkstext
+        end
+        if msg.bmSave then
+            mem.system.bookmarks = bookmarkImport(mem.ui.vars.bookmarkstext)
+        end
+        if msg.bmLoad then
+            mem.ui.vars.bookmarkstext = table.concat(bookmarkExport(mem.system.bookmarks), "\n")
+        end
+        if msg.bmAdd then
+            mem.system.bookmarks = merge(mem.system.bookmarks,bookmarkImport(mem.ui.vars.bookmarkstext))
+        end
+        if msg.bmToNav and msg.bookmark then
+            mem.jd.target = mem.system.bookmarks[msg.bookmark]
+            mem.ui.screen1.active_page=1
+        end
+        if msg.bmJump and msg.bookmark then
+            mem.jd.target = mem.system.bookmarks[msg.bookmark]
+            jdset(ctt(mem.jd.target))
+            mem.jd.command = "jump"
+            interrupt(mem.jd.delay)
+        end
+        if msg.jddelay then
+            mem.jd.delay = tonumber(msg.jddelay) 
+        end
+    end
+    if role == "admin" then
+        if msg.Sstaff then
+            mem.system.staff = split(msg.Sstaff,",")
+        end
+        if msg.Sadmin then
+            mem.system.admin = split(msg.Sadmin,",")
+        end
+    end
+    -- ui layout
+    if role == "staff" or role == "admin" then
+        screen = {
             {command = "clear"},
-            -- BUG background9 needs to be before bgcolor
-            -- {command = "add", element = "background9", X = 0, Y = 0, W = 0, H = 0, image = "ui_formbg_9_sliced.png", auto_clip = true, middle = 16},
-            -- BUG focus doesn't seem to work at all: focus = "target"
-            {command = "set", width = 13, height = 10, no_prepend = true, real_coordinates = true},
+            {command = "set", width = _swidth, height = _sheight, no_prepend = true, real_coordinates = true},
             {command = "add", element = "bgcolor", bgcolor = "#202040FF", fullscreen = "false", fbgcolor = "#10101040"},
-            {command = "add", element = "label", label = "Page:", X = 0.2, Y = 0.3},
             {
                 command = "add",
-                element = "textlist",
-                name = "page",
-                listelements = touchscreen.pages,
-                selected_id = mem.page,
-                X = 0.1,
-                Y = 0.5,
-                W = 1.5,
-                H = 7.7
+                element = "animated_image",
+                name = "backgroundimage1",
+                texture_name = "default_river_water_flowing_animated.png",
+                frame_count = 16,
+                frame_duration = 200,
+                frame_start = 1,
+                X = 0,
+                Y = 0,
+                H = _R12 * 12,
+                W = _swidth
             },
-            {command = "add", element = "label", label = "Lock:", X = 0.2, Y = 8.5},
             {
                 command = "add",
-                element = "textlist",
-                name = "lock",
-                listelements = touchscreen.permissions,
-                selected_id = mem.ts_lock,
-                X = 0.1,
-                Y = 8.7,
-                W = 1.5,
-                H = 1.2
+                element = "tabheader",
+                X = 0,
+                Y = 0,
+                name = "tabheader",
+                captions = mem.ui.screen1.pages,
+                current_tab = tonumber(mem.ui.screen1.active_page),
+                transparent = false,
+                draw_border = true
             }
         }
-        if page == "Events" then
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "textarea",
-                    name = "display",
-                    label = "Events:",
-                    default = table.concat(mem.event_catcher.touchscreen_line_table, "\n"),
-                    X = 1.5,
-                    Y = 0.55,
-                    W = 11.25,
-                    H = 9.3
-                }
-            )
-        elseif page == "Info" then
-            table.insert(
-                message,
+        -- ui screens layout
+        local page=mem.ui.screen1.active_page
+        if page == 1 then
+            local target = ""
+            if mem.jd.target == "" then
+                if mem.jd.position == "" then
+                    target = ""
+                else
+                    target = mem.jd.position
+                end
+            else
+                target = mem.jd.target
+            end
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "button",
-                    name = "getswitch",
-                    label = "Switch info",
-                    X = 8.3,
+                    X = _C12 * 0,
                     Y = 0,
-                    W = 2,
-                    H = .5
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "frompos",
+                    label = "Pos->"
                 }
             )
-            table.insert(
-                message,
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = 0,
+                    X = _C12 * 3,
+                    W = _C12 * 5,
+                    H = _R12,
+                    name = "target",
+                    label = "",
+                    default = target
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "label",
+                    label="R:",
+                    Y = 0+.3,
+                    X = (_C12 * 8) +.3,
+                    W = _C12 * 1,
+                    H = _R12,
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = 0,
+                    X = _C12 * 9,
+                    W = _C12 * 1,
+                    H = _R12,
+                    name = "radius",
+                    label = "",
+                    default = tostring(mem.ui.vars.radius)
+                }
+            )
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "button",
-                    name = "powerinfo",
-                    label = "Power Info",
-                    X = 6.3,
+                    X = _C12 * 10,
                     Y = 0,
-                    W = 2,
-                    H = .5
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "valuesset",
+                    label = "-> JD"
                 }
             )
 
-        elseif page == "Bookmarks" then
-            --mxedit
-            local bookmarkstxt=bookmarkXport()
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
-                    element = "textarea",
-                    name = "bookmarktxt",
-                    label = "Bookmark export:",
-                    default = table.concat(bookmarkstxt, "\n"),
-                    X = 1.6,
-                    Y = 1.5,
-                    W = 11.5,
-                    H = 8.75
+                    element = "button_exit",
+                    name = "jump",
+                    label = "Jump",
+                    Y = _R12 * 1,
+                    X = _C12,
+                    W = _swidth - (_C12 * 2),
+                    H = _R12
                 }
             )
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "button",
-                    name = "save",
-                    label = "Save",
-                    X = 1.6,
-                    Y = 0,
-                    W = 1,
-                    H = 0.8
+                    name = "simulate",
+                    label = "Simulate",
+                    Y = _R12 * 2,
+                    X = _C12,
+                    W = _swidth - (_C12 * 2),
+                    H = _R12
                 }
             )
-            
-
-            options = array_keys(mem.l)
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    X = _C12 * 5,
+                    Y = _R12 * 4,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "step",
+                    label = "step",
+                    default = tostring(mem.ui.vars.step) or "mem.ui.vars.step not found"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12 * 9,
+                    Y = _R12 * 3,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "xplus",
+                    label = "+X+"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12,
+                    Y = _R12 * 3,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "xminus",
+                    label = "-X-"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12 * 9,
+                    Y = _R12 * 4,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "yplus",
+                    label = "+Y+"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12,
+                    Y = _R12 * 4,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "yminus",
+                    label = "-Y-"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12,
+                    Y = _R12 * 5,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "zminus",
+                    label = "-Z-"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "textarea",
+                    X = _C12 * 1,
+                    Y = _R12 * 7,
+                    W = _C12 * 10,
+                    H = _R12 * 4,
+                    name = "jdmessages",
+                    label = "Jumpdrive report",
+                    default = table.concat(reverseTable(mem.ui.vars.jdmessages), "\n")
+                }
+            )
+            table_insert(--mxnote in the layout, this element's label interferes with the button +Z+ button if it's "over" the button (although not visible), thats why its here
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = _R12 * 6,
+                    X = _C12 * 5,
+                    W = _C12 * 6,
+                    H = _R12,
+                    name = "comment",
+                    label = "Comment",
+                    default = mem.ui.vars.comment
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12 * 9,
+                    Y = _R12 * 5,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "zplus",
+                    label = "+Z+"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    Y = _R12 * 11,
+                    X = _C12 * 8,
+                    W = _C12 * 3,
+                    H = _R12,
+                    name = "clearjdlog",
+                    label = "Clear log"
+                }
+            )
+        end
+        if page == 22 then
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button_exit",
+                    name = "reset",
+                    label = "screen 2",
+                    Y = 0,
+                    X = 0,
+                    W = _swidth
+                }
+            )
+        end
+        if page == 2 then
+            options = table_keys(mem.system.bookmarks)
             table.sort(options)
-            -- options = {"one","dos","tres"}
-            selected_index = indexOf(options, mem.destination)
-
-            table.insert(
-                message,
+            selected_index = indexOf(options, mem.ui.destination) 
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "textarea",
+                    name = "bookmarkstext",
+                    label = "Bookmark text:",
+                    default = mem.ui.vars.bookmarkstext,
+                    X = _C12,
+                    Y = _R12 * 2,
+                    W = _C12 * 10,
+                    H = _C12 * 7 
+                }
+            )
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "dropdown",
                     label = "Bookmarks",
-                    X = 8.3,
-                    Y = 1,
-                    W = 4.0,
-                    H = 0.5,
+                    X = _C12,
+                    Y = 0,
+                    W = _C12 * 7,
+                    H = _R12,
                     name = "bookmark",
                     choices = options,
                     selected_id = selected_index,
                     index_event = false
                 }
             )
-
-
-        elseif page == "Jumpdrive" then
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "button",
-                    name = "request_data",
-                    label = "Refresh",
-                    X = 1.7,
-                    Y = 0.25,
-                    W = 1.2,
-                    H = 0.5
+                    X = _C12 * 8,
+                    Y = 0,
+                    W = _C12 * 3,
+                    H = _R12,
+                    name = "bmToNav",
+                    label = "->Nav"
                 }
             )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "label",
-                    X = 3.1,
-                    Y = 0.5,
-                    label = "Distance: " ..
-                        tostring(math.ceil(mem.jumpdrive.distance)) ..
-                            "  |  " ..
-                                "EU needed: " ..
-                                    tostring(math.ceil(mem.jumpdrive.power_req)) ..
-                                        " stored: " .. tostring(math.ceil(mem.jumpdrive.powerstorage))
-                }
-            )
-
-            -- BUG The "H" parameter only shifts a field instead of resizing it. Best leave it out (same as H=0.8
-            -- BUG The "set" focus propperty doesn't seem to work. The first input field added get's the focus
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "field",
-                    name = "target",
-                    label = "Target (Current: " .. coordinates:to_string(mem.jumpdrive.position) .. ")",
-                    default = coordinates:to_string(mem.jumpdrive.target),
-                    X = 3.8,
-                    Y = 1.8,
-                    W = 4.5
-                }
-            )
-
-            -- Needs to be behind (in GUI so in front in code) radius selection or that will be blocked by it's invisible label
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "textarea",
-                    name = "display",
-                    label = "The Jumpdrive says:",
-                    default = table.concat(mem.linebuffer.jumpdrive, "\n"),
-                    X = 1.6,
-                    Y = 3.8,
-                    W = 10.7,
-                    H = 6
-                }
-            )
-
-            table.insert(message, {command = "add", element = "label", label = "Radius", X = 12, Y = 3.7})
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "textlist",
-                    name = "radius",
-                    listelements = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"},
-                    selected_id = tonumber(mem.jumpdrive.radius),
-                    X = 12.4,
-                    Y = 3.85,
-                    W = 1,
-                    H = 6
-                }
-            )
-
-            -- BUG The "H" parameter only shifts a field instead of resizing it. Best leave it out (same as H=0.8
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "field",
-                    name = "jump_step_value",
-                    label = "Distance",
-                    default = tostring(mem.instant_jump.distance),
-                    X = 1.7,
-                    Y = 1.8,
-                    W = 1.1
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "button",
-                    name = "jump_step_increase",
-                    label = "+",
-                    X = 1.7,
-                    Y = 1,
-                    W = 1.1,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "button",
-                    name = "jump_step_decrease",
-                    label = "-",
-                    X = 1.7,
-                    Y = 2.6,
-                    W = 1.1,
-                    H = 0.5
-                }
-            )
-            --
-            local incbutton="button_exit"
-            if jumpdrive.instajump == false then
-                incbutton="button"
-            end
-            
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "xi",
-                    label = (help and "@ E") or "E",
-                    X = 3.8,
-                    Y = 1,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "xd",
-                    label = (help and "@ W") or "W",
-                    X = 3.8,
-                    Y = 2.6,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "yi",
-                    label = (help and "@ ^") or "^",
-                    X = 5.3,
-                    Y = 1,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "yd",
-                    label = (help and "@ v") or "v",
-                    X = 5.3,
-                    Y = 2.6,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "zi",
-                    label = (help and "@ N") or "N",
-                    X = 6.8,
-                    Y = 1,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = incbutton,
-                    name = "zd",
-                    label = (help and "@ S") or "S",
-                    X = 6.8,
-                    Y = 2.6,
-                    W = 1.5,
-                    H = 0.5
-                }
-            )
-            if help then
-                table.insert(message, {command = "add", element = "label", label = "<  I. J.  >", X = 2.8, Y = 1.25})
-                table.insert(message, {command = "add", element = "label", label = "<  I. J.  >", X = 2.8, Y = 2.85})
-                table.insert(
-                    message,
-                    {command = "add", element = "label", label = '< "@" means "Attempt Jump" v', X = 8.3, Y = 1.25}
-                )
-                table.insert(
-                    message,
-                    {
-                        command = "add",
-                        element = "label",
-                        label = "< Instant Jump components ( I. J. )",
-                        X = 8.3,
-                        Y = 2.85
-                    }
-                )
-            end
-
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "button",
-                    name = "reset_target",
-                    label = "Reset",
-                    X = 2.8,
-                    Y = 1.8,
-                    W = 1,
-                    H = 0.8
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "button",
-                    name = "set_target",
-                    label = "Set",
-                    X = 8.3,
-                    Y = 1.8,
-                    W = 1,
-                    H = 0.8
-                }
-            )
-            table.insert(
-                message,
-                {
-                    command = "add",
-                    element = "button",
-                    name = "simulate",
-                    label = "Test",
-                    X = 9.4,
-                    Y = 1.8,
-                    W = 1,
-                    H = 0.8
-                }
-            )
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
                     element = "button_exit",
-                    name = "jump",
-                    label = (help and "Jump @") or "Jump",
-                    X = 10.5,
-                    Y = 1.8,
-                    W = 1.5,
-                    H = 0.8
+                    X = _C12 * 8,
+                    Y = _R12,
+                    W = _C12 * 3,
+                    H = _R12,
+                    name = "bmJump",
+                    label = "Jump"
                 }
             )
-            
-            selected = mem.jumpdrive.instajump
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
-                    element = "checkbox",
-                    name = "instajump",
-                    label = "Instant Jump",
-                    X = 8.3,
-                    Y = 2.9,
-                    W = 1,
-                    H = 0.8,
-                    selected = selected
+                    element = "button",
+                    X = _C12 * 0,
+                    Y = _R12 * 11,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "bmSave",
+                    label = "Save"
                 }
             )
-        else
-            table.insert(
-                message,
+            table_insert(
+                screen,
                 {
                     command = "add",
-                    element = "label",
-                    label = "This page is not yet handled: " .. tostring(touchscreen.pages[mem.page]),
-                    X = 4,
-                    Y = 4
+                    element = "button",
+                    X = _C12 * 2,
+                    Y = _R12 * 11,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "bmLoad",
+                    label = "Load"
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "button",
+                    X = _C12 * 4,
+                    Y = _R12 * 11,
+                    W = _C12 * 2,
+                    H = _R12,
+                    name = "bmAdd",
+                    label = "Add"
                 }
             )
         end
-
-        --chunkSend(touchscreen.channel, message)
-        digiline_send(touchscreen.channel, message)
-    end
-end
-
--- Handle touchscreen messages
-if event.type == "digiline" and event.channel == touchscreen.channel and event.msg then
-    if event.msg.page ~= nil then
-        local i_page = tonumber(string.sub(event.msg.page, 5))
-        if i_page ~= mem.page then
-            mem.page = i_page
-            update_page(touchscreen.pages[mem.page])
-        end
-    elseif event.msg.lock ~= nil then
-        local i_lock = tonumber(string.sub(event.msg.lock, 5))
-        if permission.check(event.msg.clicker) then
-            if i_lock ~= mem.ts_lock then
-                mem.ts_lock = i_lock
-                if mem.ts_lock == 1 then
-                    digiline_send(touchscreen.channel, {command = "unlock"})
-                    mem.permission.ignore = true
-                elseif mem.ts_lock == 2 then
-                    digiline_send(touchscreen.channel, {command = "unlock"})
-                    mem.permission.ignore = false
-                elseif mem.ts_lock == 3 then
-                    digiline_send(touchscreen.channel, {command = "lock"})
-                    mem.permission.ignore = false
-                else
-                    send_to_monitors("Unhandled ts_lock value: " .. tostring(mem.ts_lock))
-                end
-                update_page(touchscreen.pages[mem.page])
-            end
-        else
-            send_to_monitors("You can't unlock, " .. tostring(event.msg.clicker) .. " ;)")
-        end
-    elseif touchscreen.pages[mem.page] == "Jumpdrive" then
-        local authorised = permission.check(event.msg.clicker)
-        local jumpdrive_page_needs_update = false
-        local min_jump_step_value = 2 * mem.jumpdrive.radius + 1
-
-        if event.msg.jump_step_value ~= nil then
-            if tonumber(event.msg.jump_step_value) < min_jump_step_value then
-                mem.instant_jump.distance = min_jump_step_value
-            else
-                mem.instant_jump.distance = tonumber(event.msg.jump_step_value)
-            end
-            if tonumber(event.msg.jump_step_value) ~= mem.instant_jump.distance then
-                jumpdrive_page_needs_update = true
-            end
-        end
-        if event.msg.radius ~= nil then
-            if authorised then
-                mem.jumpdrive.radius = tonumber(string.sub(event.msg.radius, 5))
-                if event.msg.target ~= nil then
-                    mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables(
-                            {command = "set", r = mem.jumpdrive.radius, formupdate = false},
-                            mem.jumpdrive.target
-                        )
-                    )
-                else
-                    digiline_send(jumpdrive.channel, {command = "set", r = mem.jumpdrive.radius, formupdate = false})
-                end
-                digiline_send(jumpdrive.channel, {command = "get"})
-            else
-                send_to_monitors("You can't change the radius, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.key_enter_field ~= nil then
-            if event.msg.key_enter_field == "target" then
-                mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "get"})
-            elseif event.msg.key_enter_field == "jump_step_value" then
-                jumpdrive_page_needs_update = true
-            else
-                send_to_monitors("Unknown key_enter_field: " .. tostring(event.msg.key_enter_field))
-            end
-        elseif event.msg.reset_target ~= nil then
-            digiline_send(jumpdrive.channel, {command = "reset"})
-            digiline_send(jumpdrive.channel, {command = "get"})
-        elseif event.msg.set_target ~= nil then
-            if event.msg.target ~= nil then
-                mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "get"})
-            end
-        elseif event.msg.request_data ~= nil then
-            mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-            digiline_send(
-                jumpdrive.channel,
-                merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-            )
-            digiline_send(jumpdrive.channel, {command = "get"})
-        elseif event.msg.simulate ~= nil then
-            mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-            digiline_send(
-                jumpdrive.channel,
-                merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-            )
-            digiline_send(jumpdrive.channel, {command = "simulate"})
-        elseif event.msg.jump ~= nil then
-            if authorised then
-                mem.jumpdrive.target = coordinates:to_table(event.msg.target)
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                digiline_send(
-                    jumpdrive.channel,
-                    merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                )
-                digiline_send(jumpdrive.channel, {command = "jump"})
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.jump_step_increase ~= nil then
-            local target_jump_step_value = tonumber(event.msg.jump_step_value) + 1
-            if target_jump_step_value > min_jump_step_value then
-                mem.instant_jump.distance = target_jump_step_value
-            else
-                mem.instant_jump.distance = min_jump_step_value
-            end
-            if mem.instant_jump.distance ~= tonumber(event.msg.jump_step_value) then
-                jumpdrive_page_needs_update = true
-            end
-        elseif event.msg.jump_step_decrease ~= nil then
-            local target_jump_step_value = tonumber(event.msg.jump_step_value) - 1
-            if target_jump_step_value > min_jump_step_value then
-                mem.instant_jump.distance = target_jump_step_value
-            else
-                mem.instant_jump.distance = min_jump_step_value
-            end
-            if mem.instant_jump.distance ~= tonumber(event.msg.jump_step_value) then
-                jumpdrive_page_needs_update = true
-            end
-        elseif event.msg.xi ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.x = mem.jumpdrive.target.x + mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-                
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.xd ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.x = mem.jumpdrive.target.x - mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.yi ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.y = mem.jumpdrive.target.y + mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-                
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.yd ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.y = mem.jumpdrive.target.y - mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.zi ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.z = mem.jumpdrive.target.z + mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-                
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.zd ~= nil then
-            if authorised then
-                --                 mem.jumpdrive.target = mem.jumpdrive.position
-                mem.jumpdrive.target.z = mem.jumpdrive.target.z - mem.instant_jump.distance
-                if mem.jumpdrive.instajump then
-                    digiline_send(
-                        jumpdrive.channel,
-                        merge_shallow_tables({command = "set", formupdate = false}, mem.jumpdrive.target)
-                    )
-                    digiline_send(jumpdrive.channel, {command = "jump"})
-                else 
-                    jumpdrive_page_needs_update =true
-                end
-                
-            else
-                send_to_monitors("You can't jump, " .. tostring(event.msg.clicker) .. " ;)")
-            end
-        elseif event.msg.instajump ~= nil then
-            if authorised then
-                mem.jumpdrive.instajump = event.msg.instajump == "true"
-                jumpdrive_page_needs_update =true
-            end
-        end
-        if jumpdrive_page_needs_update == true then
-            update_page("Jumpdrive")
-        end
-    elseif touchscreen.pages[mem.page] == "Info" then
-        if event.msg.getswitch ~= nil then
-            send_to_monitors("getswitch: " .. #mem.ship.switches)
-            
-            for k,v in ipairs(mem.ship.switches) do
-                send_to_monitors("k:v = " .. k .. ":" ..v)
-                digiline_send(v,"get")
-            end
-        end
-        if event.msg.powerinfo ~= nil then
-            send_to_monitors("Getpower command")
-            send_to_monitors("getpower: " .. #mem.ship.battery)
-            
-            for k,v in ipairs(mem.ship.battery) do
-                send_to_monitors("k:v = " .. k .. ":" ..v)
-                digiline_send(v,"get")
-            end
-        end
-        mem.page=indexOf(touchscreen.pages,"Events")
-        update_page("Events")
-    elseif touchscreen.pages[mem.page] == "Bookmarks" then
---mxnote bookmarks
-        if event.msg.bookmark ~= nil and mem.destination~=event.msg.bookmark then
-            mem.destination = event.msg.bookmark 
-            mem.jumpdrive.target = coordinates:to_table(mem.l[event.msg.bookmark])
-            update_page("Bookmarks")
-            --jumpdrive_page_needs_update = true
-        end
-        --mxedit
-        if event.msg.bookmarktxt ~=nil and event.msg.save ~= nil then
-            send_to_monitors("BookmarksSave")
-            
-            mem.l = importBookmarks(event.msg.bookmarktxt)
-        end
-    end
-end
-
--- ########
--- Jumpdrive
--- ########
-if event.type == "program" then
---mxnote best place for bootstrapping is only in program state `aight?
-
-    if mem.l == nil then
-        mem.l = {
-            NotFound = "0,0,0"
-        }
-    end
-    if mem.destination == nil then
-        mem.destination="NotFound"
-    end
-    if mem.jumpdrive == nil then
-        mem.jumpdrive = {
-            radius = 1,
-            power_req = 0,
-            distance = 0,
-            powerstorage = 0,
-            position = {x = 0, y = 0, z = 0},
-            target = {x = 0, y = 0, z = 0},
-            success = false,
-            msg = "",
-            time = 0
-        }
-    end
-    if mem.ship == nil then
-        mem['ship'] = {
-            quarries = {},
-            switches = {"hvsw"},
-            battery = {"Bat1","Bat2"}
-        }
-    end
-    digiline_send(jumpdrive.channel, {command = "get"})
-end
-
-if event.type == "digiline" and event.channel == jumpdrive.channel and event.msg then
-    local output = ""
-    local updated = {}
-    for k, v in pairs(event.msg) do
-        if mem.jumpdrive[k] ~= nil then
-            --             if mem.jumpdrive[k] ~= v then output = output .. " " .. tostring(k) .. ": " .. get_string(mem.jumpdrive[k]) .. " -> " .. get_string(v) end
-            mem.jumpdrive[k] = v
-        else
-            add_line_to_buffer(
-                touchscreen.linebuffer.jumpdrive,
-                "Unknown jumpdrive propperty: " .. get_string(k) .. ":" .. get_string(v)
+        if page == 3 then
+            --notepad 
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "textarea",
+                    X = _C12 * 0,
+                    Y = _R12 * 0,
+                    W = _C12 * 12,
+                    H = _R12 * 12,
+                    name = "notepadtext",
+                    label = "",
+                    default = mem.ui.vars.notepadtext
+                }
             )
         end
-    end
-
-    if event.msg.success ~= nil then
-        if event.msg.success == true then
-            output = output .. " Success! (".. coordinates:to_string(mem.jumpdrive.target) ..")" 
-        else
-            output = output .. " Failure! (".. coordinates:to_string(mem.jumpdrive.target) ..") (Best refresh and reset)"
+        if page == 4 and role =="admin" then
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = (_bh2 *2) +(_R12 * 1),
+                    X = _C12 * 1,
+                    W = _C12 * 10,
+                    H = _R12,
+                    name = "Sstaff",
+                    label = "system.staff",
+                    default = join(mem.system.staff,",")
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = _bh2+(_R12 * 0),
+                    X = _C12 * 1,
+                    W = _C12 * 10,
+                    H = _R12,
+                    name = "Sadmin",
+                    label = "system.admin",
+                    default = join(mem.system.admin,",")
+                }
+            )
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = (_bh2 *3) +(_R12 * 2),
+                    X = _C12 * 1,
+                    W = _C12 * 10,
+                    H = _R12,
+                    name = "jddelay",
+                    label = "jumpdrive delay time",
+                    default = tostring(mem.jd.delay) 
+                }
+            )
         end
-    end
-    if event.msg.msg then
-        output = output .. " " .. event.msg.msg
-    end
-    if event.msg.time then
-        output = output .. " Jumped (" .. tostring(event.msg.time) .. ")"
-        mem.jumpdrive.position = mem.jumpdrive.target
-        digiline_send(jumpdrive.channel, {command = "get"})
-    end
-    if output ~= nil then
-        if output ~= "" then
-            add_line_to_buffer(touchscreen.linebuffer.jumpdrive, tostring(mem.events.count) .. ":" .. output)
+        if page == 4 and role =="staff" then
+            table_insert(
+                screen,
+                {
+                    command = "add",
+                    element = "field",
+                    Y = _bh2+(_R12 * 0),
+                    X = _C12 * 1,
+                    W = _C12 * 10,
+                    H = _R12,
+                    name = "jddelay",
+                    label = "jumpdrive delay time",
+                    default = tostring(mem.jd.delay) 
+                }
+            )
+            
         end
+        digiline_send(mem.ui.screen1.channel, screen)
     else
-        add_line_to_buffer(touchscreen.linebuffer.jumpdrive, tostring(mem.events.count) .. ":" .. "Output was nil!")
+        _swidht, _sheight = 1, 1
+        digiline_send(
+            mem.ui.screen1.channel,
+            {
+                {command = "clear"},
+                {command = "set", width = _swidth, height = _sheight, no_prepend = true, real_coordinates = true},
+                {
+                    command = "add",
+                    element = "bgcolor",
+                    bgcolor = "#202040FF",
+                    fullscreen = "false",
+                    fbgcolor = "#10101040"
+                },
+                {
+                    command = "add",
+                    element = "button_exit",
+                    name = "login",
+                    label = "- request access -",
+                    Y = 0,
+                    X = 0,
+                    W = _swidth,
+                    H = _sheight
+                }
+            }
+        )
     end
-
-    update_page("Jumpdrive")
+end
+function UI_jdlog(msg)
+    table_insert(mem.ui.vars.jdmessages, msg)
+    --UI_ShowScreen()
 end
 
--- ########
--- Event Catcher
--- ########
-if mem.event_catcher == nil then
-    mem.event_catcher = {
-        touchscreen_line_table = {
-            "Initialized at " .. get_time_string() .. ", " .. _VERSION,
-            mem.environment_information
-        }
-    }
-end
+if event then
+    if event.type == "digiline" then
+        if event.channel then
+            if event.channel == mem.ui.screen1.channel then
+                --UI_ShowScreen(event.msg)
+                --[[ uidebug
+                log("ui message recieved. " .. event.msg.clicker or 'unknown')
+                log(event) -- log all messages for debugging purposes only
+                /uidebug]]--
+            elseif event.channel == mem.jd.channel then
+                table_insert(mem.jdlog.buffer, event)
 
-send_to_monitors(event)
-update_page("Events")
+                if event.msg ~= nil then
+                    if event.msg.target ~= nil then
+                        mem.jd.target = cts(event.msg.target)
+                        mem.jd.position = cts(event.msg.position)
+                        mem.jd.radius = event.msg.radius
+                    end
+                    if event.msg.msg ~= nil then
+                        mem.jd.msg = event.msg.msg
+                        UI_jdlog(mem.jd.target .. " : " .. event.msg.msg)
+                    end
+                    if event.msg.success == true and event.msg.time == nil and
+                            mem.jd.command == "simulated jump"
+                     then
+                        UI_jdlog("Simulation success!")
+                    end
+                    if event.msg.success == true and event.msg.time ~= nil then
+                        mem.jd.msg = "successful jump"
+                        mem.jd.position = mem.jd.target
+                        UI_jdlog("jump: " .. mem.jd.target)
+                    end
+                    if event.msg.powerstorage ~= nil then -- mxnote:  if we get powerstorage from the jumpdrive, it is safe to assume that power_req and distance are also there, if not, this should fail because the software should be updated due to a change in the jumpdrive mod
+                        UI_jdlog("JDGet: ".. mem.ui.vars.comment .."\n"
+                        .. "\tpowerstorage: " .. math.ceil(event.msg.powerstorage/1000).." kEU"
+                        .. "\n\tpower_req: " .. math.ceil(event.msg.power_req/1000).." kEU"
+                        .. "\n\tdistance: " .. math.ceil(event.msg.distance/1000).." km")
+                    end
+                end
 
-mem.events.count = mem.events.count + 1
-
--- MIT License
--- bla
-if event.type == "program" then
-
+                
+                
+            else
+                log(event)
+            end
+        end
+        UI_ShowScreen(event.msg)
+    end
+    if event.type == "interrupt" then
+        if mem.jd.command == "jump" then
+            mem.jd.command = "attempted:jump"
+            dls(mem.jd.channel, {command = "jump"})
+        elseif mem.jd.command == "simulate" then
+            mem.jd.command = "simulated jump"
+            dls(mem.jd.channel, {command = "simulate"})
+            UI_ShowScreen()
+        end
+    end
+    if event.type == "program" then
+        if next(mem) == nil then
+            init()
+            dls(mem.jd.channel, {command = "get"})
+        end
+        -- some debug stuff here
+        mem.log={}
+        --log({DEBUG="running cvs_string_to_table_v2 on bookmarkstext",result=csv_string_to_table_v2(mem.ui.vars.bookmarkstext)})
+        --log({DEBUG="running csvtotable on bookmarkstext",result=csvtotable(mem.ui.vars.bookmarkstext)})
+        mem.jdlog = {lst = "", buffer = {}}
+        dls(mem.jd.channel, {command = "get"})
+        --[[]
+            log({
+                TEST="1buttonworks"
+            })
+        ]]--
+        --
+        UI_ShowScreen()
+    --dls(mem.jd.channel,{command="get"})
+    end
 end
