@@ -10,11 +10,11 @@ It is a touchscreen based "Operating system" for ease of navigation and reportin
 
 ## Install:
 Place a new luacontroller and touchscreen and make sure they are connected together and to your jumpdrive.
-The touchscreen should be set to the digiline channel "ts" (or you can change that in the code) so click the new touchscreen to set the channel.
-Change the users section of the code so that your username is at the first location. Click the luacontroller and paste the script into it and press "execute".
+The touchscreen should be set to the digiline channel "touch" (or you can change that in the code) so click the new touchscreen to set the channel.
+Search for "mem.system.admin" in the code and change it so that your username is there. Click the luacontroller and paste the script you just modified into it and press "execute".
 After that, you  should not have to touch the script again unless something goes horribly wrong, or want to upgrade.
 You should now be able to use the User Interface (UI) in the touchscreen to start using it. If however you see a blank screen, you might need to check all your digiline connections and channel settings.
 
-Touchscreen channel: "ts"
+Touchscreen channel: "touch"
 
 Jumpdrive channel: "jumpdrive"
