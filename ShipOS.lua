@@ -93,6 +93,27 @@ function get_string(data, maxdepth) -- *FeXoR's Jumpdrive "code:get_string"
     end
     return "Something went wrong!"
 end
+function round(num, numDecimalPlaces)
+    local mult = 10^(numDecimalPlaces or 0)
+    return math.floor(num * mult + 0.5) / mult
+end
+function numberUnits(num, units) --mxedit
+    local suffix = ""
+    if num >= 1000000 then
+        suffix = "M"
+        num = round(num / 1000000,1)
+    elseif num >= 1000 then
+        suffix = "k"
+        num = round(num / 1000,1)
+    end
+
+    if suffix == "" and units then
+        num = round(num,1)
+    end
+
+    return tostring(num) .. " " .. suffix .. units
+end
+
 -- F coordinate functions
 function ctt(sInput) -- coordinates to table
     local tNumberList = {}
@@ -223,7 +244,6 @@ function bookmarkImport(CSVBM) -- mxnote CSVBM= CSV bookmark text . format: name
    end
    return bm
 end
-
 function csvtotable(sInput) -- mxnote very simple csv reader. no escape characters, no quotes, if you want a comma in your field text: tuff luk
     -- mxnote CSV is a common data exchange format FeXoR, not cryptic at all imo ;)
     -- https://en.wikipedia.org/wiki/Comma-separated_values
@@ -295,7 +315,7 @@ function init()
     mem.system = {}
         mem.system.user = ""
         mem.system.admin = {"MCLV"} --help: change this to your username
-        mem.system.staff = {"friend1", "freind2"} --help: change these to the names of your friends that you'd also like to be able to access the system. Or you can just use the settings tab in the running system
+        mem.system.staff = {} --help: change these to the names of your friends that you'd also like to be able to access the system. Or you can just use the settings tab in the running system
         mem.system.bookmarks = {}
     mem.jdlog = {lst = "", buffer = {}}
     mem.jd = {}
@@ -984,9 +1004,9 @@ if event then
                     end
                     if event.msg.powerstorage ~= nil then -- mxnote:  if we get powerstorage from the jumpdrive, it is safe to assume that power_req and distance are also there, if not, this should fail because the software should be updated due to a change in the jumpdrive mod
                         UI_jdlog("JDGet: ".. mem.ui.vars.comment .."\n"
-                        .. "\tpowerstorage: " .. math.ceil(event.msg.powerstorage/1000).." kEU"
-                        .. "\n\tpower_req: " .. math.ceil(event.msg.power_req/1000).." kEU"
-                        .. "\n\tdistance: " .. math.ceil(event.msg.distance/1000).." km")
+                        .. "\tpowerstorage: " .. numberUnits(event.msg.powerstorage,"EU")
+                        .. "\n\tpower_req: " .. numberUnits(event.msg.power_req,"EU")
+                        .. "\n\tdistance: " .. numberUnits(event.msg.distance,"m"))
                     end
                 end
 
@@ -1029,3 +1049,21 @@ if event then
     --dls(mem.jd.channel,{command="get"})
     end
 end
+-- The MIT-Zero License
+-- 
+-- Copyright (c) 2023 github.com/MCLV-pandorabox
+-- 
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so.
+-- 
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-- THE SOFTWARE.
