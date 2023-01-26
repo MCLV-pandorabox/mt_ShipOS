@@ -3,7 +3,7 @@
 -- https://github.com/MCLV-pandorabox/mt_ShipOS
 --
 -- by MCLV ( https://github.com/MCLV-pandorabox )
--- License: no license, go ahead and do whatever. Code should be free.
+-- License: MIT-Zero. See below. Code should be free.
 --   .  and I should have plenty of coffee. 
 --   Maybe we can work something out if you feel like it.
 --
@@ -15,6 +15,8 @@
 --   That's it.
 --
 -- tags:
+--  help:
+--    help/install instructions
 --  mxnote
 --    comment by MCLV
 --  mxedit 
@@ -27,8 +29,10 @@
 -- test multi user
 -- MCLV 20230117
 -- add bookmark screen and testing(OK) done
--- MCLV 20230118 add settings page and add user management
--- 
+-- MCLV 20230118 added settings page and add user management
+-- MCLV 20230124 added fleet support. just change the jumpdrive channel to the fleetcontroller's channel
+-- MCLV 20230126 added new handy table functions table_key_exists and table_value_exits (tke,tve)
+-- MCLV 20230126 improved multi user handling of touch screen - unauthorised user can look but no touch
 local msg = event.msg
 local dls = digiline_send
 local table_insert = table.insert
@@ -48,13 +52,27 @@ function table_keys(tbl) --mxnote list all the keys of a table (php naming conve
     end
     return ks
 end
+function table_key_exists(tbl,key)
+    for i,v in pairs(tbl) do
+        if i == key then return true end
+    end
+    return false
+end
+local tke = table_key_exists 
+function table_value_exists(tbl,key)
+    for i,v in pairs(tbl) do
+        if v == key then return true end
+    end
+    return false
+end
+local tve=table_value_exists
 function indexOf(array, value) --mxnote find index of the value in array(table) : Handy for dropdown boxes
     for i, v in ipairs(array) do
         if v == value then
             return i
         end
     end
-    return nil
+    return 
 end
 function reverseTable(t) -- FAI: function written by OpenAI's chat https://chat.openai.com/
     local reversedTable = {}
@@ -98,6 +116,7 @@ function round(num, numDecimalPlaces)
     return math.floor(num * mult + 0.5) / mult
 end
 function numberUnits(num, units) --mxedit
+    local num = num or 0
     local suffix = ""
     if num >= 1000000 then
         suffix = "M"
@@ -320,7 +339,7 @@ function init()
     mem.jdlog = {lst = "", buffer = {}}
     mem.jd = {}
         mem.jd.delay=0.3 
-        mem.jd.channel = "jumpdrive"
+        mem.jd.channel = "jumpdrive" -- help: enter fleet controller or jumpdrive digiline channel
         mem.jd.msg = ""
         mem.jd.command = "" -- next command we'd like to send to the jd by interrupt -- sometimes we need to wait before we can send (digilines)
         mem.jd.target = ""
@@ -336,20 +355,25 @@ function UI_ShowScreen(msg)
     local _C6 = _swidth / 6 -- 6 column grid width
     local _R12 = _sheight / 12
     local role = acl_role(mem.system.user)
-
+    local clickerRole = "user"
     -- ui messages interpretation
-    if msg == nil then
+    if msg == nil then 
         msg = {tabheader = "1"}
     end
     if msg.clicker ~= nil then
-        mem.system.user = msg.clicker
+        clickerRole=acl_role(msg.clicker)
+        if clickerRole == "staff" or clickerRole == "admin" then 
+            mem.system.user = msg.clicker
+        end
+        
         if msg.login ~= nil then
             msg.tabheader=1
             mem.ui.screen1.active_page=1
         end
     end
     -- security protected UI changes
-    if role == "staff" or role == "admin" then
+    -- if clicker is not authorised, he can watch, but no touch(change values)
+    if tve({"admin","staff"},clickerRole) then
         if msg.tabheader ~= nil then
             mem.ui.screen1.active_page = tonumber(msg.tabheader)
         end
@@ -465,7 +489,7 @@ function UI_ShowScreen(msg)
             mem.jd.delay = tonumber(msg.jddelay) 
         end
     end
-    if role == "admin" then
+    if clickerRole == "admin" then
         if msg.Sstaff then
             mem.system.staff = split(msg.Sstaff,",")
         end
@@ -474,7 +498,7 @@ function UI_ShowScreen(msg)
         end
     end
     -- ui layout
-    if role == "staff" or role == "admin" then
+    if tve({"admin","staff"},role) then
         screen = {
             {command = "clear"},
             {command = "set", width = _swidth, height = _sheight, no_prepend = true, real_coordinates = true},
@@ -1002,11 +1026,24 @@ if event then
                         mem.jd.position = mem.jd.target
                         UI_jdlog("jump: " .. mem.jd.target)
                     end
-                    if event.msg.powerstorage ~= nil then -- mxnote:  if we get powerstorage from the jumpdrive, it is safe to assume that power_req and distance are also there, if not, this should fail because the software should be updated due to a change in the jumpdrive mod
-                        UI_jdlog("JDGet: ".. mem.ui.vars.comment .."\n"
-                        .. "\tpowerstorage: " .. numberUnits(event.msg.powerstorage,"EU")
-                        .. "\n\tpower_req: " .. numberUnits(event.msg.power_req,"EU")
-                        .. "\n\tdistance: " .. numberUnits(event.msg.distance,"m"))
+                    if event.msg.distance  then -- mxnote:  if we get distance from the jumpdrive, it is safe to assume that power_req and distance are also there, if not, this should fail because the software should be updated due to a change in the jumpdrive mod
+                        local tolog={"JDGet: ".. mem.ui.vars.comment }
+                        
+                        if event.msg.max_power_req  then
+                            table_insert(tolog,"\tmax power_req: " .. numberUnits(event.msg.max_power_req,"EU"))
+                            table_insert(tolog,"\ttotal power_req: " .. numberUnits(event.msg.total_power_req,"EU"))
+                        else
+                            table_insert(tolog,"\tpowerstorage: " .. numberUnits(event.msg.powerstorage,"EU"))
+                            table_insert(tolog,"\tpower_req: " .. numberUnits(event.msg.power_req,"EU"))
+                        end
+                        table_insert(tolog,"\tdistance: " .. numberUnits(event.msg.distance,"m"))
+                        if event.msg.engines then
+                            for i, v in ipairs(event.msg.engines) do
+                                table_insert(tolog,"\t\t E"..i.." powerstorage: ".. numberUnits(v.powerstorage,"EU"))
+                            end
+                        end
+                        UI_jdlog(table.concat(tolog,"\n"))
+                        log({DEBUG="distance detected"})
                     end
                 end
 
@@ -1037,6 +1074,7 @@ if event then
         mem.log={}
         --log({DEBUG="running cvs_string_to_table_v2 on bookmarkstext",result=csv_string_to_table_v2(mem.ui.vars.bookmarkstext)})
         --log({DEBUG="running csvtotable on bookmarkstext",result=csvtotable(mem.ui.vars.bookmarkstext)})
+        --log({DEBUG=indexOf(table_keys({one="one",two=2}),'one')})
         mem.jdlog = {lst = "", buffer = {}}
         dls(mem.jd.channel, {command = "get"})
         --[[]
