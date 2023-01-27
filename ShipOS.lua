@@ -115,7 +115,7 @@ function round(num, numDecimalPlaces)
     local mult = 10^(numDecimalPlaces or 0)
     return math.floor(num * mult + 0.5) / mult
 end
-function numberUnits(num, units) --mxedit
+function numberUnits(num, units) 
     local num = num or 0
     local suffix = ""
     if num >= 1000000 then
@@ -322,7 +322,7 @@ function init()
         mem.ui.screen1 = {}
         mem.ui.screen1.channel = "touch"
         mem.ui.screen1.active_page = 1
-        mem.ui.screen1.pages={"Navigation", "Bookmarks","Notepad","Settings"} 
+        mem.ui.screen1.pages = {"Navigation", "Bookmarks","Notepad","Settings"} --mxedit
     mem.ui.vars = {} -- mxnote the (temporary)place for variables that need to be remembered between actions,pages. Stuff only gets realy used when the user presses a button(in most cases)
         mem.ui.vars.radius = 1 -- hardcode radius
         mem.ui.vars.step = 11
@@ -529,8 +529,9 @@ function UI_ShowScreen(msg)
             }
         }
         -- ui screens layout
-        local page=mem.ui.screen1.active_page
-        if page == 1 then
+        local page = mem.ui.screen1.active_page
+        local pageName= mem.ui.screen1.pages[page] --mxedit "", "","Notepad","Settings"
+        if pageName == "Navigation" then
             local target = ""
             if mem.jd.target == "" then
                 if mem.jd.position == "" then
@@ -768,7 +769,7 @@ function UI_ShowScreen(msg)
                 }
             )
         end
-        if page == 22 then
+        if pageName == "Example" then
             table_insert(
                 screen,
                 {
@@ -782,7 +783,7 @@ function UI_ShowScreen(msg)
                 }
             )
         end
-        if page == 2 then
+        if pageName == "Bookmarks" then
             options = table_keys(mem.system.bookmarks)
             table.sort(options)
             selected_index = indexOf(options, mem.ui.destination) 
@@ -882,7 +883,7 @@ function UI_ShowScreen(msg)
                 }
             )
         end
-        if page == 3 then
+        if pageName == "Notepad" then
             --notepad 
             table_insert(
                 screen,
@@ -899,7 +900,7 @@ function UI_ShowScreen(msg)
                 }
             )
         end
-        if page == 4 and role =="admin" then
+        if pageName == "Settings" and role =="admin" then
             table_insert(
                 screen,
                 {
@@ -943,7 +944,7 @@ function UI_ShowScreen(msg)
                 }
             )
         end
-        if page == 4 and role =="staff" then
+        if pageName == "Settings" and role =="staff" then
             table_insert(
                 screen,
                 {
